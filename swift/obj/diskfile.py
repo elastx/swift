@@ -1475,7 +1475,7 @@ class BaseDiskFileManager(object):
                                                self.logger, device_dirs,
                                                auditor_type)
 
-    def get_diskfile_from_audit_location(self, audit_location):
+    def get_diskfile_from_audit_location(self, audit_location, **kwargs):
         """
         Returns a BaseDiskFile instance for an object at the given
         AuditLocation.
@@ -1485,7 +1485,7 @@ class BaseDiskFileManager(object):
         dev_path = self.get_dev_path(audit_location.device, mount_check=False)
         return self.diskfile_cls.from_hash_dir(
             self, audit_location.path, dev_path,
-            audit_location.partition, policy=audit_location.policy)
+            audit_location.partition, policy=audit_location.policy, **kwargs)
 
     def get_diskfile_and_filenames_from_hash(self, device, partition,
                                              object_hash, policy, **kwargs):
@@ -2483,9 +2483,9 @@ class BaseDiskFile(object):
         return Timestamp(t)
 
     @classmethod
-    def from_hash_dir(cls, mgr, hash_dir_path, device_path, partition, policy):
+    def from_hash_dir(cls, mgr, hash_dir_path, device_path, partition, policy, **kwargs):
         return cls(mgr, device_path, partition, _datadir=hash_dir_path,
-                   policy=policy)
+                   policy=policy, **kwargs)
 
     def open(self, modernize=False, current_time=None):
         """
