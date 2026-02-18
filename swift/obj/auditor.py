@@ -284,7 +284,7 @@ class AuditorWorker(object):
                     if 'X-Delete-At' in metadata:
                         x_delete_at = int(Timestamp(metadata['X-Delete-At']))
                         current_time = int(Timestamp(time.time()))
-                        if x_delete_at <= current_time:
+                        if x_delete_at <= current_time - int(self.expired_grace):
                             raise DiskFileExpired
             if reader:
                 with closing(reader):
