@@ -30,10 +30,10 @@ from swift.common.daemon import Daemon
 from swift.common.storage_policy import POLICIES
 from swift.common.internal_client import InternalClient, UnexpectedResponse
 from swift.common.utils import (
-    config_auto_int_value, dump_recon_cache, get_logger, list_from_csv,
-    listdir, load_pkg_resource, parse_prefixed_conf, ratelimit_sleep,
-    readconf, round_robin_iter, unlink_paths_older_than, PrefixLoggerAdapter,
-    split_path, Timestamp)
+    config_auto_int_value, config_true_value, dump_recon_cache, get_logger,
+    list_from_csv, listdir, load_pkg_resource, parse_prefixed_conf,
+    ratelimit_sleep, readconf, round_robin_iter, unlink_paths_older_than,
+    PrefixLoggerAdapter, split_path, Timestamp)
 from swift.common.http import HTTP_NOT_FOUND, HTTP_CONFLICT, \
     HTTP_PRECONDITION_FAILED
 from swift.common.recon import RECON_OBJECT_FILE, DEFAULT_RECON_CACHE_PATH
@@ -43,7 +43,7 @@ class AuditorWorker(object):
     """Walk through file system to audit objects"""
 
     def __init__(self, conf, logger, rcache, devices, zero_byte_only_at_fps=0,
-                 watcher_defs=None):
+                 watcher_defs=None, ic=None):
         if watcher_defs is None:
             watcher_defs = {}
         self.conf = conf
@@ -104,11 +104,18 @@ class AuditorWorker(object):
         self.stats_buckets = dict(
             [(s, 0) for s in self.stats_sizes + ['OVER']])
 
-        self.delete_expired = bool(self.conf.get('delete_expired') or False)
-        self.expired_grace = int(self.conf.get('expired_grace_seconds') or 691200)
-        self.ic_conf_path = \
-            self.conf.get('internal_client_conf_path') or \
-            '/etc/swift/internal-client.conf'
+        self.delete_expired = config_true_value(conf.get('delete_expired', 'false'))
+        self.expired_grace = int(conf.get('expired_grace_seconds', 691200))
+        self.ic_conf_path = conf.get('internal_client_conf_path',
+            '/etc/swift/internal-client.conf')
+
+        request_tries = int(conf.get('request_tries', 3))
+        log_route = 'object-auditor'
+        self.ic = ic or InternalClient(
+            self.ic_conf_path, 'Swift Object Auditor Delete Expired',
+            request_tries, use_replication_network=True,
+            global_conf={'log_name': '%s-ic' % conf.get(
+                'log_name', log_route)})
 
         self.watchers = [
             WatcherWrapper(wdef['klass'], name, wdef['conf'], logger)
@@ -351,13 +358,6 @@ class AuditorWorker(object):
     def delete_expired_object(self, location, diskfile_mgr):
         df_expired = diskfile_mgr.get_diskfile_from_audit_location(
             location, open_expired=True)
-        request_tries = int(self.conf.get('request_tries') or 3)
-        log_route = 'object-auditor'
-        ic = InternalClient(
-            self.ic_conf_path, 'Swift Object Auditor Delete Expired',
-            request_tries, use_replication_network=True,
-            global_conf={'log_name': '%s-ic' % self.conf.get(
-                'log_name', log_route)})
         with df_expired.open(modernize=True):
             metadata = df_expired.get_metadata()
             x_delete_at = Timestamp(metadata['X-Delete-At'])
@@ -375,7 +375,7 @@ class AuditorWorker(object):
                 acceptable_statuses = (2, HTTP_CONFLICT)
                 path = metadata.get('name', '')
                 try:
-                    ic.delete_object(*split_path(path, 3, 3, True),
+                    self.ic.delete_object(*split_path(path, 3, 3, True),
                                 headers=headers,
                                 acceptable_statuses=acceptable_statuses)
                     self.expired += 1
