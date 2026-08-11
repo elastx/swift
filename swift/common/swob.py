@@ -729,7 +729,7 @@ class Accept(object):
 
     # RFC 2616 section 2.2
     token = r'[^()<>@,;:\"/\[\]?={}\x00-\x20\x7f]+'
-    qdtext = r'[^"]'
+    qdtext = r'[^"\\]'
     quoted_pair = r'(?:\\.)'
     quoted_string = r'"(?:' + qdtext + r'|' + quoted_pair + r')*"'
     extension = (r'(?:\s*;\s*(?:' + token + r")\s*=\s*" + r'(?:' + token +
